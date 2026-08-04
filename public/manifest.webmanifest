@@ -1,0 +1,8 @@
+{
+  "name": "Singles Club",
+  "short_name": "Singles Club",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f1eb",
+  "theme_color": "#171314"
+}
