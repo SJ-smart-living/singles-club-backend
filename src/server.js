@@ -76,7 +76,7 @@ function membershipActive(m){
   return m&&m.status==='active'&&(!m.expires_at||new Date(m.expires_at)>new Date());
 }
 
-app.get('/api/health',(_req,res)=>res.json({ok:true,service:'singles-club-backend',version:'1.0.0',build:'global-premium-membership-final'}));
+app.get('/api/health',(_req,res)=>res.json({ok:true,service:'singles-club-backend',version:'1.0.0',build:'final-pwa-map-publishing'}));
 
 app.get('/api/public',async(_req,res)=>{
   const [s,p,e,posts]=await Promise.all([
@@ -98,6 +98,38 @@ app.get('/api/payment-qr',async(_req,res)=>{
   const r=await pool.query('select qr_image,qr_mime from settings where id=1');
   if(!r.rows[0]?.qr_image)return res.status(404).end();
   res.type(r.rows[0].qr_mime||'image/png').send(r.rows[0].qr_image);
+});
+
+
+app.post('/api/public-event-submissions',async(req,res)=>{
+  const b=req.body||{};
+  const required=['organizer_name','organizer_contact','title','description','city','country','public_area','start_at'];
+  for(const key of required){
+    if(!String(b[key]||'').trim())return res.status(400).json({error:`Missing ${key}`});
+  }
+  if(!['community','select','private'].includes(b.required_tier||'community')){
+    return res.status(400).json({error:'Invalid membership tier'});
+  }
+  const submissionNumber=makeCode('SUB');
+  const r=await pool.query(`insert into public_event_submissions(
+    submission_number,organizer_name,organizer_contact,title,description,city,country,
+    public_area,start_at,price,currency,required_tier
+  ) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+  returning submission_number,status,created_at`,[
+    submissionNumber,
+    String(b.organizer_name).trim().slice(0,100),
+    String(b.organizer_contact).trim().slice(0,160),
+    String(b.title).trim().slice(0,140),
+    String(b.description).trim().slice(0,1600),
+    String(b.city).trim().slice(0,100),
+    String(b.country).trim().slice(0,100),
+    String(b.public_area).trim().slice(0,160),
+    b.start_at,
+    Number(b.price||0),
+    String(b.currency||'USD').slice(0,3).toUpperCase(),
+    b.required_tier||'community'
+  ]);
+  res.status(201).json(r.rows[0]);
 });
 
 app.post('/api/memberships',upload.single('photo'),async(req,res)=>{
@@ -211,6 +243,49 @@ app.get('/api/admin/dashboard',auth,async(_req,res)=>{
     pool.query(`select count(*)::int count from events where start_at>now()`)
   ]);
   res.json({members:Object.fromEntries(members.rows.map(x=>[x.status,x.count])),bookings:Object.fromEntries(bookings.rows.map(x=>[x.status,x.count])),upcoming_events:events.rows[0].count});
+});
+
+
+app.get('/api/admin/submissions',auth,async(_req,res)=>{
+  res.json((await pool.query(`select * from public_event_submissions order by created_at desc`)).rows);
+});
+
+app.patch('/api/admin/submissions/:id',auth,async(req,res)=>{
+  const {status,admin_note}=req.body||{};
+  if(!['pending','approved','rejected','withdrawn'].includes(status)){
+    return res.status(400).json({error:'Invalid submission status'});
+  }
+  const client=await pool.connect();
+  try{
+    await client.query('begin');
+    const submission=(await client.query(
+      'select * from public_event_submissions where id=$1 for update',[req.params.id]
+    )).rows[0];
+    if(!submission)return res.status(404).json({error:'Submission not found'});
+
+    let eventId=submission.approved_event_id;
+    if(status==='approved'&&!eventId){
+      const event=(await client.query(`insert into events(
+        title_zh,title_en,description_zh,description_en,start_at,city,country,
+        timezone,public_venue,capacity,price,currency,required_tier,is_public
+      ) values($1,$1,$2,$2,$3,$4,$5,'UTC',$6,12,$7,$8,$9,true) returning id`,[
+        submission.title,submission.description,submission.start_at,submission.city,
+        submission.country,submission.public_area,submission.price,submission.currency,
+        submission.required_tier
+      ])).rows[0];
+      eventId=event.id;
+    }
+
+    await client.query(`update public_event_submissions set
+      status=$1,admin_note=$2,approved_event_id=$3,reviewed_at=now()
+      where id=$4`,[status,String(admin_note||'').slice(0,1000),eventId,req.params.id]);
+    await client.query('commit');
+    res.json({ok:true,status,approved_event_id:eventId});
+  }catch(error){
+    await client.query('rollback');
+    console.error(error);
+    res.status(500).json({error:'Unable to review submission'});
+  }finally{client.release()}
 });
 
 app.get('/api/admin/plans',auth,async(_req,res)=>res.json((await pool.query('select * from membership_plans order by sort_order')).rows));

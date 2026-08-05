@@ -161,3 +161,29 @@ alter table events add column if not exists local_currency text default '';
 alter table members add column if not exists consent_version text default '';
 alter table members add column if not exists consented_at timestamptz;
 alter table members add column if not exists preferred_language text default 'zh';
+
+
+-- Public event submission workflow.
+create table if not exists public_event_submissions(
+  id bigserial primary key,
+  submission_number text unique not null,
+  organizer_name text not null,
+  organizer_contact text not null,
+  title text not null,
+  description text not null,
+  city text not null,
+  country text not null,
+  public_area text not null,
+  start_at timestamptz not null,
+  price numeric(10,2) not null default 0,
+  currency text not null default 'USD',
+  required_tier text not null default 'community'
+    check(required_tier in ('community','select','private')),
+  status text not null default 'pending'
+    check(status in ('pending','approved','rejected','withdrawn')),
+  admin_note text default '',
+  approved_event_id bigint references events(id) on delete set null,
+  created_at timestamptz not null default now(),
+  reviewed_at timestamptz
+);
+create index if not exists public_event_submissions_status_idx on public_event_submissions(status,created_at);

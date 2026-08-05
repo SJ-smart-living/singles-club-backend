@@ -1,7 +1,7 @@
 
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let tab='dashboard';
-const text={dashboard:['概览','查看会员资格、活动报名和待处理付款。'],members:['会员管理','确认会员费并激活、暂停或结束会员资格。'],plans:['会员方案','管理三种会员等级、价格和权益。'],events:['活动管理','设置活动费用以及允许参加的最低会员等级。'],bookings:['活动报名','确认单次活动收款并开放具体地址。'],posts:['内容发布','发布活动动态和主题内容。'],settings:['品牌与收款','维护商家自己的 Stripe、Zelle 和收款二维码。']};
+const text={submissions:['发布审核','审核任何成年人提交的公开活动，批准后才进入地图。'],dashboard:['概览','查看会员资格、活动报名和待处理付款。'],members:['会员管理','确认会员费并激活、暂停或结束会员资格。'],plans:['会员方案','管理三种会员等级、价格和权益。'],events:['活动管理','设置活动费用以及允许参加的最低会员等级。'],bookings:['活动报名','确认单次活动收款并开放具体地址。'],posts:['内容发布','发布活动动态和主题内容。'],settings:['品牌与收款','维护商家自己的 Stripe、Zelle 和收款二维码。']};
 const memberLabels={awaiting_payment:'待付会员费',payment_pending:'会员费待确认',active:'有效会员',expired:'已到期',suspended:'已暂停',cancelled:'已取消',refunded:'已退款'};
 const bookingLabels={awaiting_payment:'待付活动费',payment_pending:'活动费待确认',payment_received:'已确认收款',confirmed:'名额已确认',venue_unlocked:'地址已开放',checked_in:'已签到',completed:'已完成',cancelled:'已取消',refunded:'已退款'};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -13,7 +13,38 @@ $('#loginForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/admin/
 $('#logout').onclick=async()=>{await api('/api/admin/logout',{method:'POST'});showLogin()};
 $$('[data-tab]').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 function setTab(t){tab=t;$$('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));$('#title').textContent=text[t][0];$('#sub').textContent=text[t][1];render()}
-async function render(){const p=$('#panel');p.innerHTML='<p>正在加载…</p>';try{if(tab==='dashboard')await dashboard(p);if(tab==='members')await members(p);if(tab==='plans')await plans(p);if(tab==='events')await events(p);if(tab==='bookings')await bookings(p);if(tab==='posts')await posts(p);if(tab==='settings')await settings(p)}catch(e){p.innerHTML=`<div class="notice error">${esc(e.message)}</div>`}}
+async function render(){const p=$('#panel');p.innerHTML='<p>正在加载…</p>';try{if(tab==='submissions')await submissions(p);if(tab==='dashboard')await dashboard(p);if(tab==='members')await members(p);if(tab==='plans')await plans(p);if(tab==='events')await events(p);if(tab==='bookings')await bookings(p);if(tab==='posts')await posts(p);if(tab==='settings')await settings(p)}catch(e){p.innerHTML=`<div class="notice error">${esc(e.message)}</div>`}}
+
+async function submissions(p){
+  const rows=await api('/api/admin/submissions');
+  p.innerHTML=`<div class="section-head"><h2>公开活动提交</h2></div>
+  <div class="table-wrap"><table><thead><tr>
+    <th>审核编号</th><th>组织者</th><th>活动</th><th>地区/时间</th><th>费用/等级</th><th>状态</th><th>操作</th>
+  </tr></thead><tbody>${rows.map(x=>`<tr>
+    <td><strong>${esc(x.submission_number)}</strong><br>${dt(x.created_at)}</td>
+    <td>${esc(x.organizer_name)}<br>${esc(x.organizer_contact)}</td>
+    <td><strong>${esc(x.title)}</strong><br>${esc(x.description)}</td>
+    <td>${esc(x.city)}, ${esc(x.country)}<br>${esc(x.public_area)}<br>${dt(x.start_at)}</td>
+    <td>$${Number(x.price||0).toFixed(2)}<br>${esc(x.required_tier)}</td>
+    <td><span class="badge ${x.status==='approved'?'ok':''}">${esc(x.status)}</span></td>
+    <td>
+      <textarea id="sn${x.id}" placeholder="审核备注">${esc(x.admin_note||'')}</textarea>
+      <div class="row">
+        <button data-review="approved" data-id="${x.id}">批准并发布</button>
+        <button class="danger" data-review="rejected" data-id="${x.id}">拒绝</button>
+      </div>
+    </td>
+  </tr>`).join('')}</tbody></table></div>`;
+  $$('[data-review]').forEach(b=>b.onclick=async()=>{
+    await api(`/api/admin/submissions/${b.dataset.id}`,{
+      method:'PATCH',
+      body:JSON.stringify({status:b.dataset.review,admin_note:$(`#sn${b.dataset.id}`).value})
+    });
+    notice(b.dataset.review==='approved'?'活动已批准并进入公开地图。':'提交已拒绝。');
+    render();
+  });
+}
+
 async function dashboard(p){const d=await api('/api/admin/dashboard');p.innerHTML=`<div class="stats"><div class="stat"><strong>${d.members.active||0}</strong><span>有效会员</span></div><div class="stat"><strong>${(d.members.awaiting_payment||0)+(d.members.payment_pending||0)}</strong><span>会员费待处理</span></div><div class="stat"><strong>${(d.bookings.awaiting_payment||0)+(d.bookings.payment_pending||0)}</strong><span>活动费待处理</span></div><div class="stat"><strong>${d.upcoming_events||0}</strong><span>未来活动</span></div></div>`}
 async function members(p){const rows=await api('/api/admin/members');p.innerHTML=`<div class="section-head"><h2>会员记录</h2></div><div class="table-wrap"><table><thead><tr><th>会员编号</th><th>会员</th><th>等级</th><th>会员费</th><th>状态</th><th>有效期</th><th>操作</th></tr></thead><tbody>${rows.map(x=>`<tr><td><strong>${esc(x.member_number)}</strong><br>${dt(x.created_at)}</td><td>${esc(x.display_name)} · ${x.age}岁<br>${esc(x.city)} · ${esc(x.contact)}<br>${x.photo?`<a href="/api/admin/members/${x.id}/photo" target="_blank">查看照片</a>`:''}</td><td>${esc(x.plan_name)}<br><span class="badge">${esc(x.tier)}</span></td><td>$${Number(x.plan_price).toFixed(2)}<br>${esc(x.payment_method||'未选择')}<br>${esc(x.payment_reference||'')}</td><td><select id="ms${x.id}">${Object.entries(memberLabels).map(([v,l])=>`<option value="${v}" ${v===x.status?'selected':''}>${l}</option>`).join('')}</select></td><td>${dt(x.starts_at)}<br>至 ${dt(x.expires_at)}</td><td><button data-member="${x.id}">保存</button></td></tr>`).join('')}</tbody></table></div>`;$$('[data-member]').forEach(b=>b.onclick=async()=>{await api(`/api/admin/members/${b.dataset.member}`,{method:'PATCH',body:JSON.stringify({status:$(`#ms${b.dataset.member}`).value})});notice('会员状态已保存');render()})}
 async function plans(p){const rows=await api('/api/admin/plans');p.innerHTML=`<div class="list">${rows.map(x=>`<form class="card plan"><input type="hidden" name="id" value="${x.id}"><div class="grid"><label>中文名称<input name="name_zh" value="${esc(x.name_zh)}"></label><label>英文名称<input name="name_en" value="${esc(x.name_en)}"></label><label>价格<input type="number" step=".01" name="price" value="${x.price}"></label><label>有效天数<input type="number" name="duration_days" value="${x.duration_days}"></label><label class="full">中文简介<textarea name="summary_zh">${esc(x.summary_zh)}</textarea></label><label class="full">英文简介<textarea name="summary_en">${esc(x.summary_en)}</textarea></label><label>中文权益<textarea name="features_zh">${esc(x.features_zh)}</textarea></label><label>英文权益<textarea name="features_en">${esc(x.features_en)}</textarea></label><label class="full">本等级 Stripe 链接<input name="stripe_url" value="${esc(x.stripe_url)}"></label><label>顺序<input type="number" name="sort_order" value="${x.sort_order}"></label><label><input type="checkbox" name="is_active" ${x.is_active?'checked':''}> 前台显示</label></div><button>保存方案</button></form>`).join('')}</div>`;$$('.plan').forEach(f=>f.onsubmit=async e=>{e.preventDefault();const o=Object.fromEntries(new FormData(f));o.is_active=f.is_active.checked;await api(`/api/admin/plans/${o.id}`,{method:'PATCH',body:JSON.stringify(o)});notice('方案已保存')})}
