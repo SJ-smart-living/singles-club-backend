@@ -136,6 +136,42 @@ create table if not exists posts(
   created_at timestamptz not null default now()
 );
 
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS post_type TEXT NOT NULL DEFAULT 'club';
+
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS theme TEXT NOT NULL DEFAULT 'club';
+
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS title_zh TEXT DEFAULT '';
+
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS title_en TEXT DEFAULT '';
+
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS content_zh TEXT DEFAULT '';
+
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS content_en TEXT DEFAULT '';
+
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS cta_label_zh TEXT DEFAULT '';
+
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS cta_label_en TEXT DEFAULT '';
+
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS cta_url TEXT DEFAULT '';
+
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
 insert into posts(post_type,theme,title_zh,title_en,content_zh,content_en)
 select 'club','coffee','本周咖啡交流','Coffee this week','本周新增一场小型咖啡交流，活动仅向有效会员开放。','A new small coffee gathering is open to active members.'
 where not exists(select 1 from posts);
