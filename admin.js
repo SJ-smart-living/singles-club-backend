@@ -7,8 +7,16 @@ const labels={dashboard:["概览","查看当前会员、待审核发布和活动
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const dt=v=>v?new Date(v).toLocaleString("zh-CN"):"—";
 async function api(url,opt={}){const token=getToken();const r=await fetch(url,{...opt,credentials:"same-origin",headers:{...(opt.body instanceof FormData?{}:{"Content-Type":"application/json"}),...(token?{Authorization:`Bearer ${token}`} : {}),...(opt.headers||{})}});const text=await r.text();let j={};try{j=text?JSON.parse(text):{}}catch{throw new Error("服务器返回格式异常")}if(r.status===401){if(url==="/api/admin/login")throw new Error("管理员邮箱或后台密码不正确");sessionStorage.removeItem(TOKEN_KEY);showLogin();throw new Error("登录已失效，请重新登录")}if(!r.ok)throw new Error(j.error||"操作失败");return j}
-function showLogin(){ $("#login").hidden=false;$("#app").hidden=true }
-function showApp(){ $("#login").hidden=true;$("#app").hidden=false }
+function showLogin(){
+  const login=$("#login"),app=$("#app");
+  login.hidden=false;login.style.display="grid";
+  app.hidden=true;app.style.display="none";
+}
+function showApp(){
+  const login=$("#login"),app=$("#app");
+  login.hidden=true;login.style.display="none";
+  app.hidden=false;app.style.display="grid";
+}
 function notice(msg,type="ok"){const n=document.createElement("div");n.className=`notice ${type}`;n.textContent=msg;document.body.append(n);setTimeout(()=>n.remove(),3000)}
 $("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const msg=$("#loginMsg");msg.textContent="正在登录…";try{const login=await api("/api/admin/login",{method:"POST",body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});if(login.token)sessionStorage.setItem(TOKEN_KEY,login.token);const me=await api("/api/admin/me");$("#adminEmail").textContent=me.email;showApp();await setTab("dashboard");msg.textContent=""}catch(err){msg.innerHTML=`<div class="notice error">${esc(err.message)}</div>`}});
 $("#logout").addEventListener("click",async()=>{try{await api("/api/admin/logout",{method:"POST"})}finally{sessionStorage.removeItem(TOKEN_KEY);showLogin()}});
