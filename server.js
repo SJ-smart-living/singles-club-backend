@@ -1,0 +1,6 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Singles Club 商家后台</title><link rel="stylesheet" href="/styles.css"></head><body>
+<section id="login" class="login-page"><form id="loginForm" class="login-card"><div class="logo">S</div><h1>商家后台</h1><p>管理会员资格、活动、报名和收款。</p><label>管理员邮箱<input type="email" name="email" required></label><label>后台密码<input type="password" name="password" required></label><button>登录</button><div id="loginMsg"></div></form></section>
+<div id="app" class="admin-app" hidden><aside><div class="brand"><div class="logo">S</div><div><strong>Singles Club</strong><span>会员运营控制台</span></div></div><nav>
+<button data-tab="dashboard" class="active">概览</button><button data-tab="members">会员管理</button><button data-tab="plans">会员方案</button><button data-tab="events">活动管理</button><button data-tab="bookings">活动报名</button><button data-tab="posts">内容发布</button><button data-tab="settings">品牌与收款</button>
+</nav><div class="logout"><span id="adminEmail"></span><button id="logout">退出</button></div></aside><main><header><h1 id="title">概览</h1><p id="sub"></p></header><section id="panel" class="panel"></section></main></div>
+<script src="/admin.js"></script></body></html>
