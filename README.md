@@ -54,3 +54,14 @@ https://YOUR-BACKEND.onrender.com/api
 - application status
 - Stripe, Zelle, and QR settings
 - exact venue release
+
+
+## Frontend connection
+
+For the current GitHub Pages frontend:
+
+```text
+FRONTEND_ORIGIN=https://sj-smart-living.github.io
+```
+
+After deployment, copy the Render service URL into the frontend repository's root `config.js`.
