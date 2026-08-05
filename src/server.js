@@ -66,7 +66,7 @@ function statusRank(s) {
   return order.indexOf(s);
 }
 
-app.get('/api/health', (_req,res)=>res.json({ok:true}));
+app.get('/api/health', (_req,res)=>res.json({ok:true,service:'singles-club-backend',version:'1.0.0',build:'login-route-fix'}));
 
 app.get('/api/public', async (_req,res)=>{
   const [settings,events,posts,plans] = await Promise.all([
@@ -198,6 +198,25 @@ app.patch('/api/admin/settings',auth,upload.single('qr_image'),async(req,res)=>{
     qr_image=coalesce($11,qr_image),qr_mime=case when $11 is not null then $12 else qr_mime end,updated_at=now() where id=1`,
     [b.brand_name,b.page_title,b.city,b.contact_email,b.business_address||'',b.site_url||'',b.stripe_url||'',b.zelle_name||'',b.zelle_contact||'',b.qr_label||'',img,img?req.file.mimetype:null]);
   res.json({ok:true});
+});
+
+
+// API diagnostics and JSON-only fallthrough.
+// These routes must appear before the static frontend fallback.
+app.get('/api/admin/login', (_req,res) => {
+  res.status(405).json({ error:'Use POST /api/admin/login' });
+});
+
+app.use('/api', (req,res) => {
+  res.status(404).json({ error:`API route not found: ${req.method} ${req.originalUrl}` });
+});
+
+app.use((err,req,res,next) => {
+  console.error(err);
+  if (req.originalUrl.startsWith('/api/')) {
+    return res.status(500).json({ error:'Server error' });
+  }
+  next(err);
 });
 
 app.use(express.static(path.join(rootDir,'public')));

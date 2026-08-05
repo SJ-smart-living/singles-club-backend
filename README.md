@@ -1,67 +1,47 @@
 # Singles Club Backend v1.0.0
 
-Node.js, Express, PostgreSQL, and merchant administration backend.
+Login-route correction while keeping the formal release version at `v1.0.0`.
 
-## Repository
+## Fixes
 
-Recommended repository name:
+- Prevents `/api/admin/login` from falling through to the HTML homepage.
+- Returns JSON for every unknown `/api/*` route.
+- Adds robust content-type handling to the merchant admin.
+- Preserves cookie-based admin sessions.
+- Adds a separate build marker without changing the product version.
 
-`singles-club-backend`
+## Verify after deployment
 
-## Render deployment
+Open:
 
-Use the included `render.yaml`.
+`https://singles-club-backend.onrender.com/api/health`
 
-Required environment variables:
+Expected response:
 
-- `ADMIN_EMAIL`
-- `ADMIN_PASSWORD`
-- `PUBLIC_BASE_URL`
-- `FRONTEND_ORIGIN`
-
-Example:
-
-```text
-PUBLIC_BASE_URL=https://singles-club-backend.onrender.com
-FRONTEND_ORIGIN=https://sj-smart-living.github.io
+```json
+{
+  "ok": true,
+  "service": "singles-club-backend",
+  "version": "1.0.0",
+  "build": "login-route-fix"
+}
 ```
 
-If the frontend is hosted under GitHub Pages, `FRONTEND_ORIGIN` uses the site origin only, without the repository path.
+Then open:
 
-## Admin
+`https://singles-club-backend.onrender.com/api/admin/login`
 
-```text
-https://YOUR-BACKEND.onrender.com/admin.html
+A browser GET should return:
+
+```json
+{
+  "error": "Use POST /api/admin/login"
+}
 ```
 
-## API
+## Render settings
 
-The frontend connects through:
-
-```text
-https://YOUR-BACKEND.onrender.com/api
-```
-
-## Included
-
-- PostgreSQL initialization
-- merchant authentication
-- event management
-- post management
-- membership plans
-- applications
-- private application photos
-- application status
-- Stripe, Zelle, and QR settings
-- exact venue release
-
-
-## Frontend connection
-
-For the current GitHub Pages frontend:
-
-```text
-FRONTEND_ORIGIN=https://sj-smart-living.github.io
-```
-
-After deployment, copy the Render service URL into the frontend repository's root `config.js`.
+- Branch: `main`
+- Root Directory: blank
+- Build Command: `npm install`
+- Start Command: `npm start`

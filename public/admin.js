@@ -1,6 +1,30 @@
 
 const $=s=>document.querySelector(s);let TAB='dashboard';
-async function api(url,opt={}){const r=await fetch(url,{...opt,headers:{...(opt.body instanceof FormData?{}:{'Content-Type':'application/json'}),...(opt.headers||{})}});if(r.status===401){showLogin();throw new Error('Unauthorized')}const j=await r.json();if(!r.ok)throw new Error(j.error||'Error');return j}
+async function api(url,opt={}){
+  const r=await fetch(url,{
+    ...opt,
+    credentials:'same-origin',
+    headers:{
+      ...(opt.body instanceof FormData?{}:{'Content-Type':'application/json'}),
+      'Accept':'application/json',
+      ...(opt.headers||{})
+    }
+  });
+  const type=r.headers.get('content-type')||'';
+  let data=null;
+  if(type.includes('application/json')){
+    data=await r.json();
+  }else{
+    const text=await r.text();
+    throw new Error(`Backend route returned ${r.status} ${type||'non-JSON'} instead of JSON. Check the deployed backend version.`);
+  }
+  if(r.status===401){
+    showLogin();
+    throw new Error(data.error||'Invalid email or password');
+  }
+  if(!r.ok)throw new Error(data.error||`Request failed (${r.status})`);
+  return data;
+}
 function showLogin(){$('#login').hidden=false;$('#workspace').hidden=true}function showWork(){$('#login').hidden=true;$('#workspace').hidden=false}
 $('#loginForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/admin/login',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});showWork();render()}catch(x){$('#loginMsg').textContent=x.message}};
 $('#logout').onclick=async()=>{await api('/api/admin/logout',{method:'POST'});showLogin()};
