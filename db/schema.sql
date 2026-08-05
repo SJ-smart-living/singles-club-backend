@@ -176,6 +176,83 @@ insert into posts(post_type,theme,title_zh,title_en,content_zh,content_en)
 select 'club','coffee','本周咖啡交流','Coffee this week','本周新增一场小型咖啡交流，活动仅向有效会员开放。','A new small coffee gathering is open to active members.'
 where not exists(select 1 from posts);
 
+-- Upgrade an existing events table safely.
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS title_zh TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS title_en TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS description_zh TEXT DEFAULT '';
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS description_en TEXT DEFAULT '';
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS start_at TIMESTAMPTZ;
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS deadline_at TIMESTAMPTZ;
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS region TEXT DEFAULT '';
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS country TEXT DEFAULT 'US';
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/Los_Angeles';
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS latitude NUMERIC(9,6);
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS longitude NUMERIC(9,6);
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS cover_key TEXT DEFAULT '';
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS public_venue TEXT DEFAULT '';
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS private_venue TEXT DEFAULT '';
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS capacity INTEGER NOT NULL DEFAULT 10;
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS confirmed_count INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS price NUMERIC(10,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'USD';
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS required_tier TEXT NOT NULL DEFAULT 'community';
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS image BYTEA;
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS image_mime TEXT;
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
 insert into events(title_zh,title_en,description_zh,description_en,start_at,city,price,required_tier,capacity)
 select '周末咖啡交流','Weekend Coffee Conversation','在轻松环境中认识新朋友。活动仅向有效会员开放。','Meet new people in a relaxed setting. Active membership required.',now()+interval '7 days','Pasadena',29,'community',12
 where not exists(select 1 from events);
