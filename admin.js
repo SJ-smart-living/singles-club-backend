@@ -1,145 +1,24 @@
-
-create table if not exists admins(
-  id bigserial primary key,
-  email text unique not null,
-  password_hash text not null,
-  created_at timestamptz not null default now()
-);
-
-create table if not exists settings(
-  id integer primary key default 1 check(id=1),
-  brand_name text not null default 'Singles Club',
-  page_title text not null default 'Singles Club',
-  city text not null default 'Los Angeles',
-  contact_email text default '',
-  business_address text default '',
-  site_url text default 'https://sj-smart-living.github.io/singles-club/',
-  stripe_url text default '',
-  zelle_name text default '',
-  zelle_contact text default '',
-  qr_label text default '扫码付款',
-  qr_image bytea,
-  qr_mime text,
-  updated_at timestamptz not null default now()
-);
-insert into settings(id) values(1) on conflict(id) do nothing;
-
-create table if not exists membership_plans(
-  id bigserial primary key,
-  tier text unique not null check(tier in ('community','select','private')),
-  name_zh text not null,
-  name_en text not null,
-  price numeric(10,2) not null default 0,
-  duration_days integer not null default 365,
-  summary_zh text default '',
-  summary_en text default '',
-  features_zh text default '',
-  features_en text default '',
-  stripe_url text default '',
-  sort_order integer not null default 0,
-  is_active boolean not null default true,
-  updated_at timestamptz not null default now()
-);
-
-insert into membership_plans(tier,name_zh,name_en,price,duration_days,summary_zh,summary_en,features_zh,features_en,sort_order)
-values
-('community','Community 会员','Community Membership',99,365,'获得俱乐部基础参与资格，可报名 Community 等级活动。','Core club access for Community-level activities.','会员编号\n公开会员活动报名资格\n个人报名记录\n活动通知','Member number\nCommunity event access\nBooking history\nActivity updates',1),
-('select','Select 会员','Select Membership',299,365,'包含 Community 权益，并可参加更小规模的 Select 活动。','Includes Community access plus smaller Select activities.','包含 Community 权益\nSelect 小型活动\n优先活动通知\n一次需求沟通','Community benefits\nSelect events\nPriority updates\nOne preference conversation',2),
-('private','Private 会员','Private Membership',599,365,'包含 Select 权益，可参与经双方同意的个性化线下交流协调。','Includes Select access and consent-based personalized offline coordination.','包含 Select 权益\nPrivate 等级活动\n个性化需求沟通\n经双方同意的线下交流协调','Select benefits\nPrivate-tier activities\nPersonal preference conversation\nConsent-based offline coordination',3)
-on conflict(tier) do nothing;
-
-create table if not exists members(
-  id bigserial primary key,
-  member_number text unique not null,
-  display_name text not null,
-  age integer not null check(age>=18),
-  city text not null,
-  contact text not null,
-  intro text default '',
-  preferences text default '',
-  photo bytea,
-  photo_mime text,
-  tier text not null check(tier in ('community','select','private')),
-  status text not null default 'awaiting_payment'
-    check(status in ('awaiting_payment','payment_pending','active','expired','suspended','cancelled','refunded')),
-  starts_at timestamptz,
-  expires_at timestamptz,
-  payment_method text default '',
-  payment_reference text default '',
-  payment_submitted_at timestamptz,
-  payment_received_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-create index if not exists members_contact_idx on members(lower(contact));
-create index if not exists members_status_idx on members(status,tier);
-
-create table if not exists events(
-  id bigserial primary key,
-  title_zh text not null,
-  title_en text not null,
-  description_zh text default '',
-  description_en text default '',
-  start_at timestamptz not null,
-  deadline_at timestamptz,
-  city text not null,
-  region text default 'CA',
-  country text default 'US',
-  public_venue text default '确认后提供具体地点',
-  private_venue text default '',
-  capacity integer not null default 10,
-  confirmed_count integer not null default 0,
-  price numeric(10,2) not null default 0,
-  currency text not null default 'USD',
-  required_tier text not null default 'community'
-    check(required_tier in ('community','select','private')),
-  image bytea,
-  image_mime text,
-  is_public boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create table if not exists event_bookings(
-  id bigserial primary key,
-  booking_number text unique not null,
-  member_id bigint not null references members(id) on delete cascade,
-  event_id bigint not null references events(id) on delete cascade,
-  status text not null default 'awaiting_payment'
-    check(status in ('awaiting_payment','payment_pending','payment_received','confirmed','venue_unlocked','checked_in','completed','cancelled','refunded')),
-  amount_due numeric(10,2) not null default 0,
-  currency text not null default 'USD',
-  payment_method text default '',
-  payment_reference text default '',
-  payment_submitted_at timestamptz,
-  payment_received_at timestamptz,
-  venue_unlocked_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique(member_id,event_id)
-);
-create index if not exists event_bookings_event_status_idx on event_bookings(event_id,status);
-
-create table if not exists posts(
-  id bigserial primary key,
-  post_type text not null default 'club',
-  theme text not null default 'club',
-  title_zh text default '',
-  title_en text default '',
-  content_zh text not null,
-  content_en text default '',
-  cta_label_zh text default '',
-  cta_label_en text default '',
-  cta_url text default '',
-  expires_at timestamptz,
-  is_public boolean not null default true,
-  created_at timestamptz not null default now()
-);
-
-insert into posts(post_type,theme,title_zh,title_en,content_zh,content_en)
-select 'club','coffee','本周咖啡交流','Coffee this week','本周新增一场小型咖啡交流，活动仅向有效会员开放。','A new small coffee gathering is open to active members.'
-where not exists(select 1 from posts);
-
-insert into events(title_zh,title_en,description_zh,description_en,start_at,city,price,required_tier,capacity)
-select '周末咖啡交流','Weekend Coffee Conversation','在轻松环境中认识新朋友。活动仅向有效会员开放。','Meet new people in a relaxed setting. Active membership required.',now()+interval '7 days','Pasadena',29,'community',12
-where not exists(select 1 from events);
+"use strict";
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+let tab="dashboard";
+const labels={dashboard:["概览","查看当前会员、待审核发布和活动运营状态。"],submissions:["发布审核","只有有效合作会员可以提交；批准后才会进入公开地图。"],members:["会员管理","确认会员费、激活或暂停年度会员资格。"],plans:["会员方案","管理年度会员与年度合作会员价格及付款链接。"],events:["活动管理","设置公开区域、隐私地点、每场费用和会员资格要求。"],bookings:["活动报名","确认活动付款、开放地址并管理完成状态。"],posts:["内容发布","发布平台动态，不虚构人数、付款或成功案例。"],settings:["品牌与收款","配置平台自己的 Stripe、Zelle、二维码和联系信息。"]};
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const dt=v=>v?new Date(v).toLocaleString("zh-CN"):"—";
+async function api(url,opt={}){const r=await fetch(url,{...opt,credentials:"same-origin",headers:{...(opt.body instanceof FormData?{}:{"Content-Type":"application/json"}),...(opt.headers||{})}});const text=await r.text();let j={};try{j=text?JSON.parse(text):{}}catch{throw new Error("服务器返回格式异常")}if(r.status===401){showLogin();throw new Error("登录已失效")}if(!r.ok)throw new Error(j.error||"操作失败");return j}
+function showLogin(){ $("#login").hidden=false;$("#app").hidden=true }
+function showApp(){ $("#login").hidden=true;$("#app").hidden=false }
+function notice(msg,type="ok"){const n=document.createElement("div");n.className=`notice ${type}`;n.textContent=msg;document.body.append(n);setTimeout(()=>n.remove(),3000)}
+$("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const msg=$("#loginMsg");msg.textContent="正在登录…";try{await api("/api/admin/login",{method:"POST",body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});const me=await api("/api/admin/me");$("#adminEmail").textContent=me.email;showApp();await setTab("dashboard");msg.textContent=""}catch(err){msg.innerHTML=`<div class="notice error">${esc(err.message)}</div>`}});
+$("#logout").addEventListener("click",async()=>{await api("/api/admin/logout",{method:"POST"});showLogin()});
+$$('[data-tab]').forEach(b=>b.addEventListener("click",()=>setTab(b.dataset.tab)));
+async function setTab(next){tab=next;$$('[data-tab]').forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));$("#title").textContent=labels[tab][0];$("#sub").textContent=labels[tab][1];$("#panel").innerHTML='<div class="loading">正在加载…</div>';try{await ({dashboard,submissions,members,plans,events,bookings,posts,settings}[tab])($("#panel"))}catch(err){$("#panel").innerHTML=`<div class="notice error">${esc(err.message)}</div>`}}
+async function dashboard(p){const d=await api('/api/admin/dashboard');p.innerHTML=`<div class="metric-grid"><article><small>有效会员</small><strong>${d.members.active||0}</strong></article><article><small>会员费待确认</small><strong>${d.members.payment_pending||0}</strong></article><article><small>待审核发布</small><strong>${d.pending_submissions||0}</strong></article><article><small>即将举行活动</small><strong>${d.upcoming_events||0}</strong></article><article><small>活动费待确认</small><strong>${d.bookings.payment_pending||0}</strong></article></div><div class="info-card"><h2>当前商业路径</h2><p><b>Annual Member $299/year</b>：会员资格，活动费另付。</p><p><b>Annual Partner Member $2,990/year</b>：包含会员权益和发布资格，所有公开内容仍需审核。</p><p>当前系统保留原有付款方式，不自动进行商家分账。第三方活动款与平台服务费应按实际合作条款人工确认，直至另行接入合规的市场分账系统。</p></div>`}
+async function submissions(p){const rows=await api('/api/admin/submissions');p.innerHTML=`<div class="table-wrap"><table><thead><tr><th>审核编号</th><th>合作会员/组织者</th><th>活动</th><th>地区与时间</th><th>费用</th><th>状态</th><th>审核</th></tr></thead><tbody>${rows.map(x=>`<tr><td><b>${esc(x.submission_number)}</b><br><small>${esc(x.provenance_code||'')}</small></td><td>${esc(x.organizer_name)}<br><small>${esc(x.organizer_contact)}</small></td><td><b>${esc(x.title)}</b><br><small>${esc(x.description)}</small></td><td>${esc(x.city)}, ${esc(x.country)}<br>${esc(x.public_area)}<br><small>${dt(x.start_at)}</small></td><td>${esc(x.currency)} ${Number(x.price||0).toFixed(2)}<br>${esc(x.required_tier)}</td><td><span class="badge">${esc(x.status)}</span></td><td><textarea id="note-${x.id}" placeholder="审核备注">${esc(x.admin_note||'')}</textarea><div class="row"><button data-review="approved" data-id="${x.id}">批准并发布</button><button class="danger" data-review="rejected" data-id="${x.id}">拒绝</button></div></td></tr>`).join('')}</tbody></table></div>`;$$('[data-review]').forEach(b=>b.onclick=async()=>{await api(`/api/admin/submissions/${b.dataset.id}`,{method:'PATCH',body:JSON.stringify({status:b.dataset.review,admin_note:$(`#note-${b.dataset.id}`).value})});notice(b.dataset.review==='approved'?'已批准并进入公开活动':'已拒绝');setTab('submissions')})}
+async function members(p){const rows=await api('/api/admin/members');p.innerHTML=`<div class="table-wrap"><table><thead><tr><th>会员</th><th>类型</th><th>联系</th><th>付款</th><th>有效期</th><th>操作</th></tr></thead><tbody>${rows.map(x=>`<tr><td><b>${esc(x.member_number)}</b><br>${esc(x.display_name)} · ${esc(x.age)}</td><td>${x.tier==='private'?'<span class="badge partner">Partner</span>':'<span class="badge">Member</span>'}<br>${esc(x.plan_name)}</td><td>${esc(x.city)}<br>${esc(x.contact)}</td><td>${esc(x.status)}<br><small>${esc(x.payment_method)} ${esc(x.payment_reference)}</small></td><td>${dt(x.starts_at)}<br>${dt(x.expires_at)}</td><td><select id="ms-${x.id}">${['awaiting_payment','payment_pending','active','expired','suspended','cancelled','refunded'].map(v=>`<option ${x.status===v?'selected':''}>${v}</option>`).join('')}</select><input id="mr-${x.id}" value="${esc(x.payment_reference||'')}" placeholder="付款参考"><button data-member="${x.id}">保存</button>${x.photo?`<a href="/api/admin/members/${x.id}/photo" target="_blank">查看照片</a>`:''}</td></tr>`).join('')}</tbody></table></div>`;$$('[data-member]').forEach(b=>b.onclick=async()=>{await api(`/api/admin/members/${b.dataset.member}`,{method:'PATCH',body:JSON.stringify({status:$(`#ms-${b.dataset.member}`).value,payment_reference:$(`#mr-${b.dataset.member}`).value})});notice('会员已更新');setTab('members')})}
+async function plans(p){const rows=await api('/api/admin/plans');p.innerHTML=`<div class="cards">${rows.map(x=>`<form class="edit-card" data-plan="${x.id}"><h2>${x.tier==='private'?'Partner Member':x.tier==='community'?'Annual Member':'Legacy Plan'}</h2><div class="form-grid"><label>中文名称<input name="name_zh" value="${esc(x.name_zh)}"></label><label>英文名称<input name="name_en" value="${esc(x.name_en)}"></label><label>年度价格<input type="number" name="price" value="${x.price}"></label><label>有效天数<input type="number" name="duration_days" value="${x.duration_days}"></label></div><label>中文简介<textarea name="summary_zh">${esc(x.summary_zh)}</textarea></label><label>英文简介<textarea name="summary_en">${esc(x.summary_en)}</textarea></label><label>中文权益<textarea name="features_zh">${esc(x.features_zh)}</textarea></label><label>英文权益<textarea name="features_en">${esc(x.features_en)}</textarea></label><label>该方案 Stripe Payment Link<input name="stripe_url" value="${esc(x.stripe_url)}"></label><input type="hidden" name="sort_order" value="${x.sort_order}"><label class="check"><input type="checkbox" name="is_active" ${x.is_active?'checked':''}> 前台开放</label><button>保存方案</button></form>`).join('')}</div>`;$$('[data-plan]').forEach(f=>f.onsubmit=async e=>{e.preventDefault();const o=Object.fromEntries(new FormData(f));o.is_active=f.is_active.checked;await api(`/api/admin/plans/${f.dataset.plan}`,{method:'PATCH',body:JSON.stringify(o)});notice('会员方案已保存')})}
+async function events(p){const rows=await api('/api/admin/events');p.innerHTML=`<form id="newEvent" class="edit-card"><h2>新增活动</h2>${eventFields({})}<button>创建活动</button></form><div class="cards">${rows.map(x=>`<form class="edit-card" data-event="${x.id}"><h2>${esc(x.title_zh)}</h2>${eventFields(x)}<div class="row"><button>保存</button><button type="button" class="danger" data-delete-event="${x.id}">删除</button></div></form>`).join('')}</div>`;$('#newEvent').onsubmit=async e=>{e.preventDefault();await api('/api/admin/events',{method:'POST',body:new FormData(e.currentTarget)});notice('活动已创建');setTab('events')};$$('[data-event]').forEach(f=>f.onsubmit=async e=>{e.preventDefault();await api(`/api/admin/events/${f.dataset.event}`,{method:'PATCH',body:new FormData(f)});notice('活动已保存')});$$('[data-delete-event]').forEach(b=>b.onclick=async()=>{if(confirm('确认删除活动？')){await api(`/api/admin/events/${b.dataset.deleteEvent}`,{method:'DELETE'});setTab('events')}})}
+function eventFields(x){return `<div class="form-grid"><label>中文标题<input name="title_zh" value="${esc(x.title_zh)}" required></label><label>英文标题<input name="title_en" value="${esc(x.title_en)}" required></label><label>时间<input type="datetime-local" name="start_at" value="${x.start_at?new Date(x.start_at).toISOString().slice(0,16):''}" required></label><label>报名截止<input type="datetime-local" name="deadline_at" value="${x.deadline_at?new Date(x.deadline_at).toISOString().slice(0,16):''}"></label><label>城市<input name="city" value="${esc(x.city||'Los Angeles')}" required></label><label>地区<input name="region" value="${esc(x.region||'CA')}"></label><label>国家<input name="country" value="${esc(x.country||'US')}"></label><label>时区<input name="timezone" value="${esc(x.timezone||'America/Los_Angeles')}"></label><label>公开区域<input name="public_venue" value="${esc(x.public_venue||'Greater Los Angeles')}"></label><label>具体地点（付款确认后开放）<input name="private_venue" value="${esc(x.private_venue)}"></label><label>容量<input type="number" name="capacity" value="${x.capacity||10}"></label><label>单场费用<input type="number" step=".01" name="price" value="${x.price||0}"></label><label>货币<input name="currency" value="${esc(x.currency||'USD')}"></label><label>最低资格<select name="required_tier"><option value="community" ${x.required_tier==='community'?'selected':''}>Annual Member</option><option value="private" ${x.required_tier==='private'?'selected':''}>Partner Member</option></select></label><label>封面图<input type="file" name="image" accept="image/*"></label><label class="check"><input type="checkbox" name="is_public" value="true" ${x.is_public!==false?'checked':''}> 公开显示</label></div><label>中文说明<textarea name="description_zh">${esc(x.description_zh)}</textarea></label><label>英文说明<textarea name="description_en">${esc(x.description_en)}</textarea></label>`}
+async function bookings(p){const rows=await api('/api/admin/bookings');p.innerHTML=`<div class="table-wrap"><table><thead><tr><th>报名</th><th>会员</th><th>活动/金额</th><th>状态</th><th>地址与操作</th></tr></thead><tbody>${rows.map(x=>`<tr><td><b>${esc(x.booking_number)}</b><br><small>${dt(x.created_at)}</small></td><td>${esc(x.display_name)}<br>${esc(x.member_number)}<br>${esc(x.contact)}</td><td>${esc(x.title_zh||x.title_en)}<br>${esc(x.currency)} ${Number(x.amount_due||0).toFixed(2)}</td><td><select id="bs-${x.id}">${['awaiting_payment','payment_pending','payment_received','confirmed','venue_unlocked','checked_in','completed','cancelled','refunded'].map(v=>`<option ${x.status===v?'selected':''}>${v}</option>`).join('')}</select></td><td><input id="bv-${x.id}" value="${esc(x.private_venue||'')}" placeholder="具体地点"><input id="br-${x.id}" value="${esc(x.payment_reference||'')}" placeholder="付款参考"><button data-booking="${x.id}">保存</button></td></tr>`).join('')}</tbody></table></div>`;$$('[data-booking]').forEach(b=>b.onclick=async()=>{await api(`/api/admin/bookings/${b.dataset.booking}`,{method:'PATCH',body:JSON.stringify({status:$(`#bs-${b.dataset.booking}`).value,private_venue:$(`#bv-${b.dataset.booking}`).value,payment_reference:$(`#br-${b.dataset.booking}`).value})});notice('报名已更新');setTab('bookings')})}
+async function posts(p){const rows=await api('/api/admin/posts');p.innerHTML=`<form id="postForm" class="edit-card"><h2>发布平台动态</h2><div class="form-grid"><label>类型<input name="post_type" value="club"></label><label>主题<input name="theme" value="community"></label><label>中文标题<input name="title_zh"></label><label>英文标题<input name="title_en"></label></div><label>中文内容<textarea name="content_zh" required></textarea></label><label>英文内容<textarea name="content_en"></textarea></label><label class="check"><input type="checkbox" name="is_public" checked> 公开</label><button>发布</button></form><div class="cards">${rows.map(x=>`<article class="edit-card"><small>${esc(x.theme)} · ${dt(x.created_at)}</small><h2>${esc(x.title_zh||x.title_en)}</h2><p>${esc(x.content_zh||x.content_en)}</p><button class="danger" data-delete-post="${x.id}">删除</button></article>`).join('')}</div>`;$('#postForm').onsubmit=async e=>{e.preventDefault();const o=Object.fromEntries(new FormData(e.currentTarget));o.is_public=e.currentTarget.is_public.checked;await api('/api/admin/posts',{method:'POST',body:JSON.stringify(o)});notice('内容已发布');setTab('posts')};$$('[data-delete-post]').forEach(b=>b.onclick=async()=>{await api(`/api/admin/posts/${b.dataset.deletePost}`,{method:'DELETE'});setTab('posts')})}
+async function settings(p){const x=await api('/api/admin/settings');p.innerHTML=`<form id="settingsForm" class="edit-card"><h2>平台品牌与收款</h2><div class="form-grid"><label>品牌名称<input name="brand_name" value="${esc(x.brand_name)}"></label><label>页面标题<input name="page_title" value="${esc(x.page_title)}"></label><label>首发市场<input name="city" value="${esc(x.city)}"></label><label>联系邮箱<input name="contact_email" value="${esc(x.contact_email)}"></label><label>网站地址<input name="site_url" value="${esc(x.site_url)}"></label><label>业务地址<input name="business_address" value="${esc(x.business_address)}"></label><label>平台默认 Stripe Link<input name="stripe_url" value="${esc(x.stripe_url)}"></label><label>Zelle 收款名称<input name="zelle_name" value="${esc(x.zelle_name)}"></label><label>Zelle 邮箱/电话<input name="zelle_contact" value="${esc(x.zelle_contact)}"></label><label>二维码说明<input name="qr_label" value="${esc(x.qr_label)}"></label><label>付款二维码<input type="file" name="qr_image" accept="image/*"></label></div><div class="info-card"><b>资金路径说明</b><p>年度会员费和年度合作会员费使用各方案自己的 Stripe Payment Link；若方案链接为空，使用平台默认链接。当前系统没有自动商家分账，请勿把“已提交付款”当作银行已到账，必须在后台人工确认。</p></div><button>保存设置</button></form>`;$('#settingsForm').onsubmit=async e=>{e.preventDefault();await api('/api/admin/settings',{method:'PATCH',body:new FormData(e.currentTarget)});notice('设置已保存')}}
+(async()=>{try{const me=await api('/api/admin/me');$("#adminEmail").textContent=me.email;showApp();await setTab('dashboard')}catch{showLogin()}})();

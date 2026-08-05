@@ -300,3 +300,33 @@ create table if not exists public_event_submissions(
   reviewed_at timestamptz
 );
 create index if not exists public_event_submissions_status_idx on public_event_submissions(status,created_at);
+
+
+-- LivingHub v1.1 compatible product migration.
+alter table public_event_submissions add column if not exists partner_member_id bigint references members(id) on delete set null;
+alter table public_event_submissions add column if not exists provenance_code text default '';
+alter table events add column if not exists provenance_code text default '';
+alter table events add column if not exists canonical_url text default '';
+
+-- Keep the existing tier identifiers and payment columns while presenting two active products.
+update membership_plans set
+  name_zh='LivingHub 年度会员',name_en='LivingHub Annual Member',price=299,duration_days=365,
+  summary_zh='获得平台年度会员资格，可浏览和报名符合条件的洛杉矶活动；每场活动费用另付。',
+  summary_en='Annual platform membership for eligible Los Angeles experiences; each experience may charge separately.',
+  features_zh='年度会员编号\n浏览公开活动\n报名符合条件的活动\n会员专属合作商家服务区\n具体地址按条件开放',
+  features_en='Annual member number\nPublic experience discovery\nEligible event booking\nMember partner benefits\nConditional venue release',
+  sort_order=1,is_active=true,updated_at=now()
+where tier='community';
+
+update membership_plans set is_active=false,sort_order=2,updated_at=now() where tier='select';
+
+update membership_plans set
+  name_zh='LivingHub 年度合作会员',name_en='LivingHub Annual Partner Member',price=2990,duration_days=365,
+  summary_zh='包含年度会员权益，并获得活动与合作商家信息提交资格；所有公开内容仍须平台审核。',
+  summary_en='Includes annual member access plus the right to submit experiences and partner listings, subject to platform review.',
+  features_zh='包含年度会员全部权益\n提交活动与商家信息\n审核后进入地图与活动列表\n管理活动报名\n每场活动可单独设置费用',
+  features_en='All annual member benefits\nSubmit experiences and partner listings\nMap publication after review\nBooking management\nSeparate pricing per experience',
+  sort_order=2,is_active=true,updated_at=now()
+where tier='private';
+
+update settings set brand_name='LivingHub',page_title='LivingHub · Singles Club',city='Greater Los Angeles',site_url='https://livinghub.app',updated_at=now() where id=1;

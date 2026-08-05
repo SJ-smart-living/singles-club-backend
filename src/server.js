@@ -76,13 +76,13 @@ function membershipActive(m){
   return m&&m.status==='active'&&(!m.expires_at||new Date(m.expires_at)>new Date());
 }
 
-app.get('/api/health',(_req,res)=>res.json({ok:true,service:'singles-club-backend',version:'1.0.0',build:'final-pwa-map-publishing'}));
+app.get('/api/health',(_req,res)=>res.json({ok:true,service:'singles-club-backend',version:'1.0.0',build:'livinghub-v1.1-compatible'}));
 
 app.get('/api/public',async(_req,res)=>{
   const [s,p,e,posts]=await Promise.all([
     pool.query(`select brand_name,page_title,city,contact_email,business_address,site_url,default_locale,default_currency,default_timezone,updated_at from settings where id=1`),
     pool.query(`select id,tier,name_zh,name_en,price,duration_days,summary_zh,summary_en,features_zh,features_en,sort_order from membership_plans where is_active=true order by sort_order`),
-    pool.query(`select e.id,e.title_zh,e.title_en,e.description_zh,e.description_en,e.start_at,e.deadline_at,e.city,e.region,e.country,e.timezone,e.latitude,e.longitude,e.cover_key,e.public_venue,e.capacity,e.confirmed_count,e.price,e.currency,e.required_tier,(e.image is not null) has_image,
+    pool.query(`select e.id,e.title_zh,e.title_en,e.description_zh,e.description_en,e.start_at,e.deadline_at,e.city,e.region,e.country,e.timezone,e.latitude,e.longitude,e.cover_key,e.provenance_code,e.canonical_url,e.public_venue,e.capacity,e.confirmed_count,e.price,e.currency,e.required_tier,(e.image is not null) has_image,
       greatest(0,e.capacity-e.confirmed_count-coalesce((select count(*) from event_bookings b where b.event_id=e.id and b.status in ('awaiting_payment','payment_pending')),0))::int available_spots
       from events e where e.is_public=true and e.start_at>now()-interval '1 day' order by e.start_at`),
     pool.query(`select * from posts where is_public=true and (expires_at is null or expires_at>now()) order by created_at desc limit 20`)
@@ -103,31 +103,23 @@ app.get('/api/payment-qr',async(_req,res)=>{
 
 app.post('/api/public-event-submissions',async(req,res)=>{
   const b=req.body||{};
-  const required=['organizer_name','organizer_contact','title','description','city','country','public_area','start_at'];
-  for(const key of required){
-    if(!String(b[key]||'').trim())return res.status(400).json({error:`Missing ${key}`});
-  }
-  if(!['community','select','private'].includes(b.required_tier||'community')){
-    return res.status(400).json({error:'Invalid membership tier'});
-  }
+  const required=['member_number','member_contact','organizer_name','organizer_contact','title','description','city','country','public_area','start_at'];
+  for(const key of required){if(!String(b[key]||'').trim())return res.status(400).json({error:`Missing ${key}`})}
+  const partner=(await pool.query(`select * from members where lower(member_number)=lower($1) and lower(contact)=lower($2) and tier='private' limit 1`,[b.member_number,b.member_contact])).rows[0];
+  if(!membershipActive(partner))return res.status(403).json({error:'Active Partner Membership required'});
+  if(!['community','private'].includes(b.required_tier||'community'))return res.status(400).json({error:'Invalid membership tier'});
   const submissionNumber=makeCode('SUB');
+  const provenanceCode=`LH-${submissionNumber}`;
   const r=await pool.query(`insert into public_event_submissions(
-    submission_number,organizer_name,organizer_contact,title,description,city,country,
+    submission_number,partner_member_id,provenance_code,organizer_name,organizer_contact,title,description,city,country,
     public_area,start_at,price,currency,required_tier
-  ) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-  returning submission_number,status,created_at`,[
-    submissionNumber,
-    String(b.organizer_name).trim().slice(0,100),
-    String(b.organizer_contact).trim().slice(0,160),
-    String(b.title).trim().slice(0,140),
-    String(b.description).trim().slice(0,1600),
-    String(b.city).trim().slice(0,100),
-    String(b.country).trim().slice(0,100),
-    String(b.public_area).trim().slice(0,160),
-    b.start_at,
-    Number(b.price||0),
-    String(b.currency||'USD').slice(0,3).toUpperCase(),
-    b.required_tier||'community'
+  ) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+  returning submission_number,status,provenance_code,created_at`,[
+    submissionNumber,partner.id,provenanceCode,String(b.organizer_name).trim().slice(0,100),
+    String(b.organizer_contact).trim().slice(0,160),String(b.title).trim().slice(0,140),
+    String(b.description).trim().slice(0,1600),String(b.city).trim().slice(0,100),
+    String(b.country).trim().slice(0,100),String(b.public_area).trim().slice(0,160),b.start_at,
+    Number(b.price||0),String(b.currency||'USD').slice(0,3).toUpperCase(),b.required_tier||'community'
   ]);
   res.status(201).json(r.rows[0]);
 });
@@ -237,12 +229,13 @@ app.post('/api/admin/logout',(_req,res)=>{res.clearCookie('admin_token');res.jso
 app.get('/api/admin/me',auth,(req,res)=>res.json(req.admin));
 
 app.get('/api/admin/dashboard',auth,async(_req,res)=>{
-  const [members,bookings,events]=await Promise.all([
+  const [members,bookings,events,submissions]=await Promise.all([
     pool.query(`select status,count(*)::int count from members group by status`),
     pool.query(`select status,count(*)::int count from event_bookings group by status`),
-    pool.query(`select count(*)::int count from events where start_at>now()`)
+    pool.query(`select count(*)::int count from events where start_at>now()`),
+    pool.query(`select count(*)::int count from public_event_submissions where status='pending'`)
   ]);
-  res.json({members:Object.fromEntries(members.rows.map(x=>[x.status,x.count])),bookings:Object.fromEntries(bookings.rows.map(x=>[x.status,x.count])),upcoming_events:events.rows[0].count});
+  res.json({members:Object.fromEntries(members.rows.map(x=>[x.status,x.count])),bookings:Object.fromEntries(bookings.rows.map(x=>[x.status,x.count])),upcoming_events:events.rows[0].count,pending_submissions:submissions.rows[0].count});
 });
 
 
@@ -267,11 +260,11 @@ app.patch('/api/admin/submissions/:id',auth,async(req,res)=>{
     if(status==='approved'&&!eventId){
       const event=(await client.query(`insert into events(
         title_zh,title_en,description_zh,description_en,start_at,city,country,
-        timezone,public_venue,capacity,price,currency,required_tier,is_public
-      ) values($1,$1,$2,$2,$3,$4,$5,'UTC',$6,12,$7,$8,$9,true) returning id`,[
+        timezone,public_venue,capacity,price,currency,required_tier,is_public,provenance_code,canonical_url
+      ) values($1,$1,$2,$2,$3,$4,$5,'America/Los_Angeles',$6,12,$7,$8,$9,true,$10,$11) returning id`,[
         submission.title,submission.description,submission.start_at,submission.city,
         submission.country,submission.public_area,submission.price,submission.currency,
-        submission.required_tier
+        submission.required_tier,submission.provenance_code,`${process.env.FRONTEND_ORIGIN?.split(',')[0]||'https://livinghub.app'}/?event=${submission.submission_number}`
       ])).rows[0];
       eventId=event.id;
     }
