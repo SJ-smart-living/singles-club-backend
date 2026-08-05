@@ -222,10 +222,10 @@ app.post('/api/admin/login',async(req,res)=>{
   const a=(await pool.query('select * from admins where email=$1',[email])).rows[0];
   if(!a||!(await bcrypt.compare(password,a.password_hash)))return res.status(401).json({error:'Invalid login'});
   const token=jwt.sign({id:a.id,email},SECRET,{expiresIn:'12h'});
-  res.cookie('admin_token',token,{httpOnly:true,sameSite:'lax',secure:process.env.NODE_ENV==='production',maxAge:43200000});
-  res.json({ok:true});
+  res.cookie('admin_token',token,{httpOnly:true,sameSite:'lax',secure:process.env.NODE_ENV==='production',path:'/',maxAge:43200000});
+  res.json({ok:true,token});
 });
-app.post('/api/admin/logout',(_req,res)=>{res.clearCookie('admin_token');res.json({ok:true})});
+app.post('/api/admin/logout',(_req,res)=>{res.clearCookie('admin_token',{sameSite:'lax',secure:process.env.NODE_ENV==='production',path:'/'});res.json({ok:true})});
 app.get('/api/admin/me',auth,(req,res)=>res.json(req.admin));
 
 app.get('/api/admin/dashboard',auth,async(_req,res)=>{
