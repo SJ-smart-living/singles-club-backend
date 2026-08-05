@@ -1,47 +1,26 @@
-# Singles Club Backend v1.0.0
+# Singles Club Global Premium Backend v1.0.0
 
-Login-route correction while keeping the formal release version at `v1.0.0`.
+Membership-gated backend with global event fields and privacy boundaries.
 
-## Fixes
+## Core model
 
-- Prevents `/api/admin/login` from falling through to the HTML homepage.
-- Returns JSON for every unknown `/api/*` route.
-- Adds robust content-type handling to the merchant admin.
-- Preserves cookie-based admin sessions.
-- Adds a separate build marker without changing the product version.
+- Paid membership is required before event booking.
+- Community, Select, and Private tiers control event access.
+- Membership fees and individual event fees remain separate.
+- Exact venues are released only after operator confirmation.
+- Member contacts, photos, profiles, and payment records are private admin data.
 
-## Verify after deployment
+## Global fields
 
-Open:
+- Country / region
+- Time zone
+- Latitude / longitude for visual activity mapping
+- Currency per event
+- Preferred language
+- Consent version and consent timestamp
 
-`https://singles-club-backend.onrender.com/api/health`
+## Important boundary
 
-Expected response:
+This code provides general product controls. It does not itself establish legal compliance in any country. The operator must localize privacy notices, payment terms, refund rules, age requirements, tax treatment, consumer protection, data retention, and hosting arrangements.
 
-```json
-{
-  "ok": true,
-  "service": "singles-club-backend",
-  "version": "1.0.0",
-  "build": "login-route-fix"
-}
-```
-
-Then open:
-
-`https://singles-club-backend.onrender.com/api/admin/login`
-
-A browser GET should return:
-
-```json
-{
-  "error": "Use POST /api/admin/login"
-}
-```
-
-## Render settings
-
-- Branch: `main`
-- Root Directory: blank
-- Build Command: `npm install`
-- Start Command: `npm start`
+Formal version: `v1.0.0`

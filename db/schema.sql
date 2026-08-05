@@ -1,31 +1,82 @@
 
-create table if not exists settings (
-  id integer primary key default 1 check (id = 1),
-  brand_name text not null default 'Singles Club',
-  page_title text not null default 'Singles Club — Real Events and Serious Connections',
-  city text not null default 'Los Angeles, California',
-  contact_email text not null default 'hello@example.com',
-  business_address text default '',
-  site_url text default '',
-  stripe_url text default '',
-  zelle_name text default '',
-  zelle_contact text default '',
-  qr_label text default '',
-  qr_image bytea,
-  qr_mime text,
-  updated_at timestamptz not null default now()
-);
-
-create table if not exists admins (
+create table if not exists admins(
   id bigserial primary key,
   email text unique not null,
   password_hash text not null,
   created_at timestamptz not null default now()
 );
 
-create table if not exists events (
+create table if not exists settings(
+  id integer primary key default 1 check(id=1),
+  brand_name text not null default 'Singles Club',
+  page_title text not null default 'Singles Club',
+  city text not null default 'Los Angeles',
+  contact_email text default '',
+  business_address text default '',
+  site_url text default 'https://sj-smart-living.github.io/singles-club/',
+  stripe_url text default '',
+  zelle_name text default '',
+  zelle_contact text default '',
+  qr_label text default '扫码付款',
+  qr_image bytea,
+  qr_mime text,
+  updated_at timestamptz not null default now()
+);
+insert into settings(id) values(1) on conflict(id) do nothing;
+
+create table if not exists membership_plans(
   id bigserial primary key,
-  title_zh text,
+  tier text unique not null check(tier in ('community','select','private')),
+  name_zh text not null,
+  name_en text not null,
+  price numeric(10,2) not null default 0,
+  duration_days integer not null default 365,
+  summary_zh text default '',
+  summary_en text default '',
+  features_zh text default '',
+  features_en text default '',
+  stripe_url text default '',
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  updated_at timestamptz not null default now()
+);
+
+insert into membership_plans(tier,name_zh,name_en,price,duration_days,summary_zh,summary_en,features_zh,features_en,sort_order)
+values
+('community','Community 会员','Community Membership',99,365,'获得俱乐部基础参与资格，可报名 Community 等级活动。','Core club access for Community-level activities.','会员编号\n公开会员活动报名资格\n个人报名记录\n活动通知','Member number\nCommunity event access\nBooking history\nActivity updates',1),
+('select','Select 会员','Select Membership',299,365,'包含 Community 权益，并可参加更小规模的 Select 活动。','Includes Community access plus smaller Select activities.','包含 Community 权益\nSelect 小型活动\n优先活动通知\n一次需求沟通','Community benefits\nSelect events\nPriority updates\nOne preference conversation',2),
+('private','Private 会员','Private Membership',599,365,'包含 Select 权益，可参与经双方同意的个性化线下交流协调。','Includes Select access and consent-based personalized offline coordination.','包含 Select 权益\nPrivate 等级活动\n个性化需求沟通\n经双方同意的线下交流协调','Select benefits\nPrivate-tier activities\nPersonal preference conversation\nConsent-based offline coordination',3)
+on conflict(tier) do nothing;
+
+create table if not exists members(
+  id bigserial primary key,
+  member_number text unique not null,
+  display_name text not null,
+  age integer not null check(age>=18),
+  city text not null,
+  contact text not null,
+  intro text default '',
+  preferences text default '',
+  photo bytea,
+  photo_mime text,
+  tier text not null check(tier in ('community','select','private')),
+  status text not null default 'awaiting_payment'
+    check(status in ('awaiting_payment','payment_pending','active','expired','suspended','cancelled','refunded')),
+  starts_at timestamptz,
+  expires_at timestamptz,
+  payment_method text default '',
+  payment_reference text default '',
+  payment_submitted_at timestamptz,
+  payment_received_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists members_contact_idx on members(lower(contact));
+create index if not exists members_status_idx on members(status,tier);
+
+create table if not exists events(
+  id bigserial primary key,
+  title_zh text not null,
   title_en text not null,
   description_zh text default '',
   description_en text default '',
@@ -34,12 +85,14 @@ create table if not exists events (
   city text not null,
   region text default 'CA',
   country text default 'US',
-  public_venue text default 'Venue shared after confirmation',
+  public_venue text default '确认后提供具体地点',
   private_venue text default '',
-  capacity integer not null default 0,
+  capacity integer not null default 10,
   confirmed_count integer not null default 0,
   price numeric(10,2) not null default 0,
   currency text not null default 'USD',
+  required_tier text not null default 'community'
+    check(required_tier in ('community','select','private')),
   image bytea,
   image_mime text,
   is_public boolean not null default true,
@@ -47,80 +100,64 @@ create table if not exists events (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists posts (
+create table if not exists event_bookings(
   id bigserial primary key,
-  post_type text not null default 'platform' check (post_type in ('platform','activity')),
-  content_zh text default '',
-  content_en text not null,
+  booking_number text unique not null,
+  member_id bigint not null references members(id) on delete cascade,
+  event_id bigint not null references events(id) on delete cascade,
+  status text not null default 'awaiting_payment'
+    check(status in ('awaiting_payment','payment_pending','payment_received','confirmed','venue_unlocked','checked_in','completed','cancelled','refunded')),
+  amount_due numeric(10,2) not null default 0,
+  currency text not null default 'USD',
+  payment_method text default '',
+  payment_reference text default '',
+  payment_submitted_at timestamptz,
+  payment_received_at timestamptz,
+  venue_unlocked_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(member_id,event_id)
+);
+create index if not exists event_bookings_event_status_idx on event_bookings(event_id,status);
+
+create table if not exists posts(
+  id bigserial primary key,
+  post_type text not null default 'club',
+  theme text not null default 'club',
+  title_zh text default '',
+  title_en text default '',
+  content_zh text not null,
+  content_en text default '',
+  cta_label_zh text default '',
+  cta_label_en text default '',
+  cta_url text default '',
   expires_at timestamptz,
   is_public boolean not null default true,
   created_at timestamptz not null default now()
 );
 
-create table if not exists plans (
-  id bigserial primary key,
-  name text not null,
-  price numeric(10,2) not null,
-  summary_zh text default '',
-  summary_en text default '',
-  features_zh text default '',
-  features_en text default '',
-  stripe_url text default '',
-  sort_order integer not null default 0,
-  is_active boolean not null default true,
-  created_at timestamptz not null default now()
-);
+insert into posts(post_type,theme,title_zh,title_en,content_zh,content_en)
+select 'club','coffee','本周咖啡交流','Coffee this week','本周新增一场小型咖啡交流，活动仅向有效会员开放。','A new small coffee gathering is open to active members.'
+where not exists(select 1 from posts);
 
-create table if not exists applications (
-  id bigserial primary key,
-  application_code text unique not null,
-  display_name text not null,
-  age integer not null check (age >= 18),
-  city text not null,
-  contact text not null,
-  relationship_goal text default '',
-  intro text default '',
-  offer_type text not null check (offer_type in ('event','plan')),
-  event_id bigint references events(id) on delete set null,
-  plan_id bigint references plans(id) on delete set null,
-  status text not null default 'submitted',
-  private_venue text default '',
-  payment_reference text default '',
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+insert into events(title_zh,title_en,description_zh,description_en,start_at,city,price,required_tier,capacity)
+select '周末咖啡交流','Weekend Coffee Conversation','在轻松环境中认识新朋友。活动仅向有效会员开放。','Meet new people in a relaxed setting. Active membership required.',now()+interval '7 days','Pasadena',29,'community',12
+where not exists(select 1 from events);
 
-create table if not exists application_photos (
-  id bigserial primary key,
-  application_id bigint not null references applications(id) on delete cascade,
-  image bytea not null,
-  mime text not null,
-  sort_order integer not null default 0,
-  approved boolean not null default false,
-  created_at timestamptz not null default now()
-);
 
-insert into settings (id) values (1) on conflict (id) do nothing;
+-- Global premium fields (idempotent).
+alter table settings add column if not exists default_locale text not null default 'en-US';
+alter table settings add column if not exists default_currency text not null default 'USD';
+alter table settings add column if not exists default_timezone text not null default 'America/Los_Angeles';
+alter table settings add column if not exists privacy_contact text default '';
+alter table settings add column if not exists operator_legal_name text default '';
 
-insert into plans (name,price,summary_zh,summary_en,features_zh,features_en,sort_order)
-select * from (values
-('Club',99,'进入本地活动与公共学习小组。','Access local events and public learning groups.','每月1次基础活动\n公共学习小组\n有限会员简介','1 basic event monthly\nPublic learning groups\nLimited member profiles',1),
-('Connection',299,'更多真实活动、授权会员资料和人工介绍。','More events, authorized profiles, and human introductions.','每月3次活动或小组\n更多授权简介\n优先报名\n有限人工介绍','3 events or groups monthly\nMore authorized profiles\nPriority registration\nLimited human introductions',2),
-('Private',599,'私人活动与更深入的人工服务。','Private events and deeper human support.','人工整理资料\n每月人工推荐\n私人小型活动\n双人体验协调','Human profile preparation\nMonthly recommendations\nPrivate small events\nCouple experience coordination',3)
-) as v(name,price,summary_zh,summary_en,features_zh,features_en,sort_order)
-where not exists (select 1 from plans);
+alter table events add column if not exists timezone text not null default 'America/Los_Angeles';
+alter table events add column if not exists latitude numeric(9,6);
+alter table events add column if not exists longitude numeric(9,6);
+alter table events add column if not exists cover_key text default '';
+alter table events add column if not exists local_currency text default '';
 
-insert into events (title_zh,title_en,start_at,city,capacity,price)
-select * from (values
-('咖啡与认真交流','Coffee & Conversation',now()+interval '14 days','Pasadena',12,49),
-('周日城市散步','Sunday City Walk',now()+interval '21 days','Los Angeles',16,39),
-('小型主题晚餐','Small Group Dinner',now()+interval '28 days','Arcadia',10,69)
-) as v(title_zh,title_en,start_at,city,capacity,price)
-where not exists (select 1 from events);
-
-insert into posts (post_type,content_zh,content_en)
-select * from (values
-('platform','本周活动申请即将截止。','Applications close soon this week.'),
-('activity','Pasadena 咖啡交流剩余少量确认名额。','A few confirmed spots remain for the Pasadena coffee meetup.')
-) as v(post_type,content_zh,content_en)
-where not exists (select 1 from posts);
+alter table members add column if not exists consent_version text default '';
+alter table members add column if not exists consented_at timestamptz;
+alter table members add column if not exists preferred_language text default 'zh';
