@@ -218,12 +218,33 @@ app.post('/api/event-booking-status',async(req,res)=>{
 });
 
 app.post('/api/admin/login',async(req,res)=>{
-  const email=String(req.body.email||'').toLowerCase(),password=String(req.body.password||'');
-  const a=(await pool.query('select * from admins where email=$1',[email])).rows[0];
-  if(!a||!(await bcrypt.compare(password,a.password_hash)))return res.status(401).json({error:'Invalid login'});
-  const token=jwt.sign({id:a.id,email},SECRET,{expiresIn:'12h'});
+  const email=String(req.body.email||'').trim().toLowerCase();
+  const password=String(req.body.password||'').trim();
+  if(!email||!password)return res.status(400).json({error:'Email and password are required'});
+
+  const envEmail=String(process.env.ADMIN_EMAIL||'').trim().toLowerCase();
+  const envPassword=String(process.env.ADMIN_PASSWORD||'').trim();
+  let admin=null;
+  let valid=false;
+
+  // The Render environment values are the canonical operator credentials.
+  // This keeps login available even if an older database hash was not refreshed.
+  if(envEmail&&envPassword&&email===envEmail&&password===envPassword){
+    admin=(await pool.query('select * from admins where email=$1',[email])).rows[0];
+    if(!admin){
+      const hash=await bcrypt.hash(envPassword,12);
+      admin=(await pool.query('insert into admins(email,password_hash) values($1,$2) returning *',[email,hash])).rows[0];
+    }
+    valid=true;
+  }else{
+    admin=(await pool.query('select * from admins where email=$1',[email])).rows[0];
+    valid=Boolean(admin&&await bcrypt.compare(password,admin.password_hash));
+  }
+
+  if(!valid||!admin)return res.status(401).json({error:'Invalid email or admin password'});
+  const token=jwt.sign({id:admin.id,email:admin.email},SECRET,{expiresIn:'12h'});
   res.cookie('admin_token',token,{httpOnly:true,sameSite:'lax',secure:process.env.NODE_ENV==='production',path:'/',maxAge:43200000});
-  res.json({ok:true,token});
+  res.json({ok:true,token,email:admin.email});
 });
 app.post('/api/admin/logout',(_req,res)=>{res.clearCookie('admin_token',{sameSite:'lax',secure:process.env.NODE_ENV==='production',path:'/'});res.json({ok:true})});
 app.get('/api/admin/me',auth,(req,res)=>res.json(req.admin));

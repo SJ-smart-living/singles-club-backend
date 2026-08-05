@@ -9,3 +9,8 @@ This release does not implement Stripe Connect or automatic merchant revenue spl
 ## Admin authentication repair
 
 The existing admin routes are unchanged. Login now keeps the secure HttpOnly cookie and also returns a short-lived bearer token stored only in the current browser tab session, improving compatibility with browsers that block or discard cookies.
+
+
+## Admin authentication compatibility
+
+The Render `ADMIN_EMAIL` and `ADMIN_PASSWORD` values are treated as canonical operator credentials. Existing API routes and payment workflows are unchanged.
