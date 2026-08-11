@@ -330,3 +330,65 @@ update membership_plans set
 where tier='private';
 
 update settings set brand_name='LivingHub',page_title='LivingHub · Singles Club',city='Greater Los Angeles',site_url='https://livinghub.app',updated_at=now() where id=1;
+
+-- =========================================================
+-- LivingHub v1.1 open-organizer compatibility migrations
+-- =========================================================
+UPDATE membership_plans SET
+  name_zh='Basic 免费会员', name_en='Basic Member', price=0, duration_days=3650,
+  summary_zh='免费注册后可报名普通活动，也可提交自己的活动；所有公开活动仍需平台审核。',
+  summary_en='Free registration for standard event booking and moderated event submissions.',
+  features_zh='免费注册\n报名 Basic 活动\n提交自己的活动\n查看自己的报名记录',
+  features_en='Free registration\nBook Basic events\nSubmit your own events\nView booking records',
+  sort_order=1,is_active=true,updated_at=now() WHERE tier='community';
+
+UPDATE membership_plans SET
+  name_zh='Annual 年度会员', name_en='Annual Member', price=299, duration_days=365,
+  summary_zh='可参加组织者设置为 Annual Member 限定的活动；每场活动费用仍由组织者单独设置和收取。',
+  summary_en='Access to organizer-designated Annual Member events. Event fees remain separate and are collected by organizers.',
+  features_zh='包含 Basic 权益\n可报名 Annual Member 限定活动\n年度会员状态',
+  features_en='Includes Basic access\nAnnual Member-only events\nAnnual membership status',
+  sort_order=2,is_active=true,updated_at=now() WHERE tier='select';
+
+UPDATE membership_plans SET is_active=false,updated_at=now() WHERE tier='private';
+
+
+-- Existing community registrations become active because Basic is now free.
+UPDATE members
+SET status='active',
+    starts_at=coalesce(starts_at,now()),
+    expires_at=coalesce(expires_at,now()+interval '3650 days'),
+    updated_at=now()
+WHERE tier='community'
+  AND status IN ('awaiting_payment','payment_pending');
+
+ALTER TABLE public_event_submissions ADD COLUMN IF NOT EXISTS min_participants integer NOT NULL DEFAULT 2;
+ALTER TABLE public_event_submissions ADD COLUMN IF NOT EXISTS capacity integer NOT NULL DEFAULT 10;
+ALTER TABLE public_event_submissions ADD COLUMN IF NOT EXISTS deadline_at timestamptz;
+ALTER TABLE public_event_submissions ADD COLUMN IF NOT EXISTS payment_method text DEFAULT '';
+ALTER TABLE public_event_submissions ADD COLUMN IF NOT EXISTS payment_name text DEFAULT '';
+ALTER TABLE public_event_submissions ADD COLUMN IF NOT EXISTS payment_contact text DEFAULT '';
+ALTER TABLE public_event_submissions ADD COLUMN IF NOT EXISTS payment_url text DEFAULT '';
+ALTER TABLE public_event_submissions ADD COLUMN IF NOT EXISTS payment_qr bytea;
+ALTER TABLE public_event_submissions ADD COLUMN IF NOT EXISTS payment_qr_mime text;
+ALTER TABLE public_event_submissions ADD COLUMN IF NOT EXISTS refund_policy text DEFAULT '';
+ALTER TABLE public_event_submissions ADD COLUMN IF NOT EXISTS cover_image bytea;
+ALTER TABLE public_event_submissions ADD COLUMN IF NOT EXISTS cover_mime text;
+ALTER TABLE public_event_submissions ADD COLUMN IF NOT EXISTS organizer_terms_version text DEFAULT '2026-08-11';
+
+ALTER TABLE events ADD COLUMN IF NOT EXISTS organizer_member_id bigint REFERENCES members(id) ON DELETE SET NULL;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS organizer_name text DEFAULT '';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS organizer_contact text DEFAULT '';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS organizer_payment_method text DEFAULT '';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS organizer_payment_name text DEFAULT '';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS organizer_payment_contact text DEFAULT '';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS organizer_payment_url text DEFAULT '';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS organizer_payment_qr bytea;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS organizer_payment_qr_mime text;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS refund_policy text DEFAULT '';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS min_participants integer NOT NULL DEFAULT 2;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS event_status text NOT NULL DEFAULT 'recruiting';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS cancellation_reason text DEFAULT '';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS share_code text;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS organizer_terms_version text DEFAULT '2026-08-11';
+CREATE UNIQUE INDEX IF NOT EXISTS events_share_code_unique ON events(share_code) WHERE share_code IS NOT NULL;

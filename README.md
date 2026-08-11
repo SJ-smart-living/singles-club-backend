@@ -1,16 +1,19 @@
-# LivingHub · Singles Club Backend v1.1.0
+# LivingHub Backend v1.1.0
 
-Compatible upgrade based directly on the supplied backend. Existing public/admin API paths and the current Stripe/Zelle/QR payment workflow are retained.
+This release preserves the existing Render service, PostgreSQL database, established API paths, and platform membership payment workflow while adding the open-organizer launch model.
 
-## Important
-This release does not implement Stripe Connect or automatic merchant revenue splitting. Payment submission remains a record that requires operator confirmation. Annual membership links can be configured per plan in Club Console.
+## Launch model
 
+- Basic registration is free and activates immediately.
+- Annual Member is optional at $299/year and uses the existing platform membership payment flow.
+- Any active LivingHub registration can submit an event.
+- Event organizers choose their own price, payment method, minimum group size, capacity, registration deadline, and refund policy.
+- Organizer event fees are paid directly to organizers; LivingHub does not hold or take a commission from those event fees during the launch phase.
+- All public event submissions require operator review.
+- Approved events receive a share code and social-preview share page.
+- Organizers can review their own booking records, confirm direct payment receipt, release the private venue after the group forms, cancel the event, and mark refunds.
+- Event statuses support recruiting, formed, full, minimum-not-met cancellation, organizer cancellation, and completed.
 
-## Admin authentication repair
+Health build: `livinghub-v1.1-open-organizer`
 
-The existing admin routes are unchanged. Login now keeps the secure HttpOnly cookie and also returns a short-lived bearer token stored only in the current browser tab session, improving compatibility with browsers that block or discard cookies.
-
-
-## Admin authentication compatibility
-
-The Render `ADMIN_EMAIL` and `ADMIN_PASSWORD` values are treated as canonical operator credentials. Existing API routes and payment workflows are unchanged.
+Formal product version: `v1.1.0`
